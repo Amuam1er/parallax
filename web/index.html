@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parallax — is it blocked, or just down?</title>
+<style>
+  :root { font-family: system-ui, sans-serif; }
+  body { max-width: 640px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
+  h1 { font-weight: 600; margin-bottom: .25rem; }
+  p.tag { color: #555; margin-top: 0; }
+  .row { display: flex; gap: .5rem; margin: 1rem 0; }
+  input { flex: 1; padding: .6rem .7rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 8px; }
+  button { padding: .6rem 1rem; font-size: 1rem; border: 0; border-radius: 8px; background: #1d9e75; color: #fff; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  #out { margin-top: 1.25rem; }
+  .verdict { font-size: 1.3rem; font-weight: 600; }
+  .signals { margin-top: .75rem; font-size: .9rem; color: #444; }
+  .signals span { display: inline-block; margin-right: 1rem; }
+  .rec { margin-top: .5rem; color: #333; }
+  code { background: #f1efe8; padding: .1rem .3rem; border-radius: 4px; }
+</style>
+</head>
+<body>
+  <h1>Parallax</h1>
+  <p class="tag">Compares what a domain looks like from your network vs. a clean one. The difference is the censorship.</p>
+
+  <div class="row">
+    <input id="domain" placeholder="example.com" value="">
+    <button id="go">Check</button>
+  </div>
+
+  <div id="out"></div>
+
+  <script src="verdict.js"></script>
+  <script src="probe.js"></script>
+  <script>
+    // Point this at your deployed control endpoint (default: local dev server).
+    const CONTROL_BASE = "http://localhost:8787";
+    const out = document.getElementById("out");
+    const go = document.getElementById("go");
+
+    go.onclick = async () => {
+      const domain = document.getElementById("domain").value.trim().toLowerCase();
+      if (!domain) return;
+      go.disabled = true;
+      out.innerHTML = "<p>Probing from your vantage…</p>";
+      try {
+        const r = await window.Parallax.runCheck(domain, { controlBase: CONTROL_BASE });
+        out.innerHTML = `
+          <div class="verdict">${r.verdict}${r.method_hint ? " — " + r.method_hint : ""}</div>
+          <div class="rec">${r.recommendation}</div>
+          <div class="signals">
+            <span>DoH: <code>${r.signals.doh}</code></span>
+            <span>your network: <code>${r.signals.client_reach}</code></span>
+            <span>control: <code>${r.signals.control}</code></span>
+            <span>confidence: <code>${r.confidence}</code></span>
+          </div>`;
+      } catch (e) {
+        out.innerHTML = "<p>Something went wrong running the check.</p>";
+      } finally {
+        go.disabled = false;
+      }
+    };
+  </script>
+</body>
+</html>
