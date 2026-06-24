@@ -33,6 +33,10 @@ async function dohLookup(domain) {
 // One reachability sample through the browser's normal (OS/ISP) resolver — the user's
 // real path. CORS hides the body, but a no-cors fetch still reveals whether a socket
 // opened. We classify the OUTCOME, not the contents.
+// LIMITATION: if an ISP redirects the domain's DNS to a block-page server, a socket
+// opens to that server → outcome "connected" → ACCESSIBLE verdict, even though the user
+// is seeing a censorship notice. JS cannot read the OS resolver's answer. Tier B fixes
+// this via browser.dns.resolve(), which compares the returned IP to DoH ground truth.
 async function reachSample(domain, timeoutMs = 4000) {
   const url = `https://${domain}/favicon.ico?cb=${Date.now()}_${Math.random().toString(36).slice(2)}`;
   const controller = new AbortController();

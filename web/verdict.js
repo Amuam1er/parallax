@@ -11,9 +11,13 @@
 // claim below):
 //   - It CAN observe whether a socket to the target opened from the user's path.
 //   - It CANNOT see the IP the user's OS resolver returned (opaque to JS), so it
-//     CANNOT, in Tier A, distinguish DNS poisoning from IP/TCP blocking. That
-//     layer-level attribution is the explicit job of Tier B (browser.dns.resolve).
-// We therefore never assert a blocking *layer* we did not measure.
+//     CANNOT distinguish DNS poisoning from IP/TCP blocking. We use blocking="tcp_ip"
+//     as the closest OONI vocabulary fit for a socket/transport probe, with
+//     layer_unconfirmed_in_browser flagging the ambiguity. Tier B confirms the layer.
+//   - It CANNOT detect DNS hijacking to a block page: if the ISP redirects DNS to a
+//     block-page server, the socket opens and we read ACCESSIBLE (false negative).
+//     Tier B (browser.dns.resolve) catches this by comparing the resolver's answer
+//     to DoH ground truth.
 
 function computeVerdict({ doh, reach, control, calibration }) {
   const notes = [];
@@ -50,6 +54,10 @@ function computeVerdict({ doh, reach, control, calibration }) {
   // (3) Up on a clean network AND reachable from here → accessible. This wins over
   // a DoH failure: if the user can reach the site, encrypted-DNS trouble did not
   // block access (we note it as a secondary signal instead of crying wolf).
+  // KNOWN LIMITATION (Tier A false negative): if an ISP hijacks DNS to a block-page
+  // server, a socket opens to that server, outcome is "connected", and the verdict is
+  // ACCESSIBLE — even though the user is being served a censorship notice. JS cannot
+  // read the OS resolver's answer, so we cannot detect this here. Tier B fixes it.
   if (control.up === true && reachable) {
     if (doh && doh.ok === false) notes.push("doh_failed_but_site_reachable");
     return build("ACCESSIBLE", "high", false, true, null,
@@ -66,9 +74,12 @@ function computeVerdict({ doh, reach, control, calibration }) {
   }
 
   // (5) THE HEADLINE CASE: up elsewhere, not reachable here → your network is
-  // interfering. We cannot isolate the layer in-browser, so `blocking` is reported
-  // as transport-level ("tcp_ip") with an explicit caveat note rather than a
-  // confident DNS-vs-IP claim. Confidence stays "medium" for the same reason.
+  // interfering. We use blocking="tcp_ip" because: (a) OONI's vocabulary has no
+  // "layer unknown" value, and (b) our probe IS a socket/transport-layer test — it
+  // tries to open a TCP connection. However, DNS poisoning returning an unreachable IP
+  // produces the same observation (socket fails), so we cannot rule it out without
+  // Tier B. The note layer_unconfirmed_in_browser documents this; confidence is
+  // "medium" for the same reason.
   if (control.up === true && !reachable) {
     const hint = reach && reach.outcome === "timeout"
       ? "timeout-filtering (probable)"

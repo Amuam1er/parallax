@@ -6,7 +6,7 @@ const { computeVerdict } = require("../web/verdict.js");
 const goodCal = { connection_ok: true, anchors: [{ domain: "example.com", outcome: "connected" }] };
 const badCal = { connection_ok: false, anchors: [{ domain: "example.com", outcome: "timeout" }] };
 
-test("headline: up elsewhere, timeout here -> BLOCKED_FOR_YOU (transport)", () => {
+test("headline: up elsewhere, timeout here -> BLOCKED_FOR_YOU (transport probe, layer unconfirmed)", () => {
   const r = computeVerdict({
     doh: { ok: true, addresses: ["1.2.3.4"] },
     reach: { outcome: "timeout" },
@@ -41,6 +41,21 @@ test("up elsewhere and reachable here -> ACCESSIBLE", () => {
   assert.strictEqual(r.verdict, "ACCESSIBLE");
   assert.strictEqual(r.blocking, false);
   assert.strictEqual(r.accessible, true);
+});
+
+test("DNS hijack to block page -> ACCESSIBLE (known Tier A false-negative)", () => {
+  // If an ISP redirects the domain's DNS to a block-page server, a socket opens to
+  // that server and reach.outcome is "connected". The verdict engine cannot distinguish
+  // this from genuine reachability — JS cannot read the OS resolver's returned IP.
+  // ACCESSIBLE is the correct output given what Tier A can observe. Tier B's
+  // browser.dns.resolve() fixes this by comparing the resolver's answer to DoH truth.
+  const r = computeVerdict({
+    doh: { ok: true, addresses: ["1.2.3.4"] },
+    reach: { outcome: "connected" }, // socket opened — possibly to a block-page server
+    control: { up: true, tcp: true, tls: true },
+    calibration: goodCal,
+  });
+  assert.strictEqual(r.verdict, "ACCESSIBLE"); // accurate given Tier A's observable scope
 });
 
 test("reachable but DoH failed -> still ACCESSIBLE, noted (no false alarm)", () => {

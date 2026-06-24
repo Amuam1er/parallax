@@ -61,15 +61,24 @@ From an **unmodified browser** Parallax:
 - **CAN** observe whether a socket to the target opened from the user's path.
 - **CAN** obtain encrypted ground-truth DNS via DoH.
 - **CANNOT** read the IP address the user's OS resolver returned — it is opaque to
-  JavaScript. Therefore in Tier A it **cannot distinguish DNS poisoning from IP/TCP
-  blocking**. We never assert a blocking *layer* we did not measure: `BLOCKED_FOR_YOU`
-  reports `tcp_ip` with the note `layer_unconfirmed_in_browser`, and confidence stays
-  `medium`.
+  JavaScript. `BLOCKED_FOR_YOU` uses `blocking="tcp_ip"` because OONI's vocabulary has
+  no "layer unknown" value and our probe IS a socket/transport-layer test (it tries to
+  open a TCP connection). DNS poisoning that returns an *unreachable* IP produces the
+  same socket-failure observation, so the layer is not confirmed. The note
+  `layer_unconfirmed_in_browser` documents this explicitly; confidence stays `medium`.
+  `tcp_ip` is the closest-fit OONI vocabulary term, not a certain layer claim.
 
-Confirming the interference *layer* (comparing the resolver's answer to ground truth)
-requires `browser.dns.resolve()`, which is **Tier B** (see [ROADMAP.md](ROADMAP.md)).
-This boundary is a deliberate design honesty, and the central justification for the
-proposed work.
+- **CANNOT detect DNS hijacking to a block page.** If an ISP redirects a domain's DNS
+  to its own block-page server, a socket opens to that server, `client_reach` reads
+  `connected`, and the verdict is `ACCESSIBLE` — even though the user is being served a
+  censorship notice. Connectivity-only probing cannot catch this from the browser because
+  JS cannot read the OS resolver's answer and compare it to ground truth.
+
+Both limitations share the same fix: `browser.dns.resolve()` in **Tier B**
+(see [ROADMAP.md](ROADMAP.md)) exposes the resolver's actual answer. Comparing it
+against DoH ground truth catches DNS poisoning whether the block-page socket opens or
+not, and confirms the interference layer for `BLOCKED_FOR_YOU`. These two cases are the
+central technical justification for the Tier B extension.
 
 ## 5. Why bias toward INCONCLUSIVE
 
