@@ -1,0 +1,25 @@
+{
+  "name": "parallax",
+  "version": "0.2.0",
+  "description": "Tell whether a domain is blocked on your own network vs. simply down — by comparing your vantage point against a clean-network control. Emits OONI-style open measurement data.",
+  "license": "GPL-3.0-only",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test",
+    "start:control": "node control/server.js",
+    "serve:web": "node --eval \"require('http').createServer((q,s)=>{const f=require('fs'),p=require('path');let fp=p.join('web',q.url==='/'?'index.html':q.url.split('?')[0]);f.readFile(fp,(e,d)=>{if(e){s.writeHead(404).end();return}s.writeHead(200).end(d)})}).listen(5500,()=>console.log('parallax web on :5500'))\""
+  },
+  "keywords": [
+    "censorship",
+    "network-measurement",
+    "ooni",
+    "internet-freedom",
+    "dns-over-https",
+    "circumvention"
+  ],
+  "dependencies": {},
+  "devDependencies": {}
+}

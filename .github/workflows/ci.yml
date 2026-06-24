@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Run tests (zero dependencies)
+        run: node --test
+
+  control-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Boot control endpoint and hit /health
+        run: |
+          node control/server.js &
+          SERVER_PID=$!
+          sleep 1
+          curl -fsS http://localhost:8787/health | tee /dev/stderr | grep -q '"ok":true'
+          curl -fsS "http://localhost:8787/control?domain=bad_domain" -o /dev/null -w "%{http_code}\n" | grep -q 400 || true
+          kill $SERVER_PID

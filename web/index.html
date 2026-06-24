@@ -13,11 +13,15 @@
   input { flex: 1; padding: .6rem .7rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 8px; }
   button { padding: .6rem 1rem; font-size: 1rem; border: 0; border-radius: 8px; background: #1d9e75; color: #fff; cursor: pointer; }
   button:disabled { opacity: .5; cursor: default; }
+  button.ghost { background: #fff; color: #1d9e75; border: 1px solid #1d9e75; }
   #out { margin-top: 1.25rem; }
   .verdict { font-size: 1.3rem; font-weight: 600; }
+  .summary { margin-top: .35rem; font-size: .95rem; color: #1a1a1a; }
   .signals { margin-top: .75rem; font-size: .9rem; color: #444; }
   .signals span { display: inline-block; margin-right: 1rem; }
   .rec { margin-top: .5rem; color: #333; }
+  .actions { margin-top: 1rem; }
+  .notes { margin-top: .6rem; font-size: .8rem; color: #777; }
   code { background: #f1efe8; padding: .1rem .3rem; border-radius: 4px; }
 </style>
 </head>
@@ -33,12 +37,23 @@
   <div id="out"></div>
 
   <script src="verdict.js"></script>
+  <script src="measurement.js"></script>
   <script src="probe.js"></script>
   <script>
     // Point this at your deployed control endpoint (default: local dev server).
     const CONTROL_BASE = "http://localhost:8787";
     const out = document.getElementById("out");
     const go = document.getElementById("go");
+    let lastMeasurement = null;
+
+    function download(name, obj) {
+      const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
 
     go.onclick = async () => {
       const domain = document.getElementById("domain").value.trim().toLowerCase();
@@ -46,16 +61,26 @@
       go.disabled = true;
       out.innerHTML = "<p>Probing from your vantage…</p>";
       try {
-        const r = await window.Parallax.runCheck(domain, { controlBase: CONTROL_BASE });
+        const { verdict: r, measurement } = await window.Parallax.runCheck(domain, { controlBase: CONTROL_BASE });
+        lastMeasurement = measurement;
         out.innerHTML = `
           <div class="verdict">${r.verdict}${r.method_hint ? " — " + r.method_hint : ""}</div>
+          <div class="summary">
+            blocking: <code>${r.blocking}</code> · accessible: <code>${r.accessible}</code>
+          </div>
           <div class="rec">${r.recommendation}</div>
           <div class="signals">
             <span>DoH: <code>${r.signals.doh}</code></span>
             <span>your network: <code>${r.signals.client_reach}</code></span>
             <span>control: <code>${r.signals.control}</code></span>
             <span>confidence: <code>${r.confidence}</code></span>
+          </div>
+          ${r.notes && r.notes.length ? `<div class="notes">notes: ${r.notes.join(", ")}</div>` : ""}
+          <div class="actions">
+            <button class="ghost" id="dl">Download measurement (JSON)</button>
           </div>`;
+        document.getElementById("dl").onclick = () =>
+          download(`parallax-${domain}-${measurement.report_id}.json`, lastMeasurement);
       } catch (e) {
         out.innerHTML = "<p>Something went wrong running the check.</p>";
       } finally {
