@@ -10,6 +10,8 @@
 // no query logging. See docs/PRIVACY.md.
 
 const http = require("http");
+const fs = require("fs");
+const path = require("path");
 const dns = require("dns").promises;
 const net = require("net");
 const tls = require("tls");
@@ -17,6 +19,11 @@ const { URL } = require("url");
 
 const PORT = process.env.PORT || 8787;
 const SOFTWARE_VERSION = "0.2.0"; // keep in sync with package.json
+const WEB_DIR = path.resolve(__dirname, "..", "web");
+const MIME = {
+  ".html": "text/html; charset=utf-8",
+  ".js":   "application/javascript; charset=utf-8",
+};
 // Hostnames only: per-label 1-63 chars, no leading/trailing hyphen, IDN punycode
 // (xn--) accepted in labels and TLD. Rejects IP literals, schemes, paths, spaces.
 const DOMAIN_RE = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+([a-z]{2,}|xn--[a-z0-9]+)$/i;
@@ -81,15 +88,29 @@ const server = http.createServer(async (req, res) => {
 
   const u = new URL(req.url, `http://localhost:${PORT}`);
   if (u.pathname === "/health") { sendJSON(res, 200, { ok: true, software_version: SOFTWARE_VERSION }); return; }
-  if (u.pathname !== "/control") { sendJSON(res, 404, { error: "not_found" }); return; }
 
-  const domain = (u.searchParams.get("domain") || "").toLowerCase().trim();
-  if (!DOMAIN_RE.test(domain)) { sendJSON(res, 400, { error: "invalid_domain" }); return; }
+  if (u.pathname === "/control") {
+    const domain = (u.searchParams.get("domain") || "").toLowerCase().trim();
+    if (!DOMAIN_RE.test(domain)) { sendJSON(res, 400, { error: "invalid_domain" }); return; }
+    try {
+      sendJSON(res, 200, await check(domain));
+    } catch (_) {
+      sendJSON(res, 500, { error: "check_failed" });
+    }
+    return;
+  }
 
+  // Static files from web/ for everything else
+  const pathname = u.pathname === "/" ? "/index.html" : u.pathname;
+  const safePath = path.resolve(WEB_DIR, "." + pathname);
+  const rel = path.relative(WEB_DIR, safePath);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) { sendJSON(res, 403, { error: "forbidden" }); return; }
   try {
-    sendJSON(res, 200, await check(domain));
+    const data = await fs.promises.readFile(safePath);
+    res.writeHead(200, { "content-type": MIME[path.extname(safePath)] || "application/octet-stream" });
+    res.end(data);
   } catch (_) {
-    sendJSON(res, 500, { error: "check_failed" });
+    sendJSON(res, 404, { error: "not_found" });
   }
 });
 
